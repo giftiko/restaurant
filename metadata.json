@@ -1,0 +1,6 @@
+{
+  "name": "L'Atelier Hearth Restaurant & Bar",
+  "description": "Artisanal dining menu with categorized seasonal dishes, interactive customization, and a live real-time order tracking system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
