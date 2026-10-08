@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { CategoryNav } from './components/CategoryNav';
 import { MenuItemCard } from './components/MenuItemCard';
+import { FeaturedSpotlight } from './components/FeaturedSpotlight';
+import { SearchModal } from './components/SearchModal';
+import { FloatingTicketDock } from './components/FloatingTicketDock';
 import { ItemCustomizerModal } from './components/ItemCustomizerModal';
 import { CartDrawer } from './components/CartDrawer';
 import { OrderTracker } from './components/OrderTracker';
 import { ChefPhilosophy } from './components/ChefPhilosophy';
-import { MENU_ITEMS, INITIAL_ACTIVE_ORDER, HERO_IMAGE } from './data/menuData';
+import { MENU_ITEMS, INITIAL_ACTIVE_ORDER } from './data/menuData';
 import { MenuItem, CategoryId, CartItem, CartItemOption, Order, OrderStage, KitchenLogEvent } from './types/menu';
-import { ShoppingBag, Flame, Sparkles, Check, Clock, Utensils } from 'lucide-react';
+import { Check, Utensils } from 'lucide-react';
 
 const ORDER_STAGES: OrderStage[] = [
   'received',
@@ -56,6 +59,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<'menu' | 'tracker' | 'philosophy'>('menu');
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [dietaryFilter, setDietaryFilter] = useState<string | null>(null);
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -70,7 +74,18 @@ export default function App() {
   const [simSpeed, setSimSpeed] = useState<number>(1);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Filtered menu items
+  // Search filtered results for the SearchModal
+  const searchResults = MENU_ITEMS.filter((item) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      item.name.toLowerCase().includes(q) ||
+      item.description.toLowerCase().includes(q) ||
+      item.pairingRecommendation?.toLowerCase().includes(q)
+    );
+  });
+
+  // Filtered menu items for the main browsing experience
   const filteredMenuItems = MENU_ITEMS.filter((item) => {
     if (selectedCategory !== 'all' && item.categoryId !== selectedCategory) {
       return false;
@@ -82,13 +97,6 @@ export default function App() {
       if (dietaryFilter !== 'Chef-Special' && !item.dietary?.includes(dietaryFilter as any)) {
         return false;
       }
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = item.name.toLowerCase().includes(q);
-      const matchDesc = item.description.toLowerCase().includes(q);
-      const matchPairing = item.pairingRecommendation?.toLowerCase().includes(q);
-      if (!matchName && !matchDesc && !matchPairing) return false;
     }
     return true;
   });
@@ -140,7 +148,7 @@ export default function App() {
     };
 
     setCartItems([...cartItems, newCartItem]);
-    showToast(`Added ${quantity}x ${item.name} with customizations`);
+    showToast(`Added ${quantity}x ${item.name} to ticket`);
   };
 
   const handleUpdateQuantity = (cartItemId: string, newQuantity: number) => {
@@ -176,7 +184,7 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 2500);
+    }, 2400);
   };
 
   // Fire new order
@@ -211,7 +219,7 @@ export default function App() {
       tip,
       total,
       stage: 'received',
-      estimatedRemainingSeconds: 960, // 16 min
+      estimatedRemainingSeconds: 960,
       totalEstimatedSeconds: 960,
       stationName: 'Central Hearth & Expo',
       stationTemp: '840°F White Oak Fire',
@@ -232,7 +240,7 @@ export default function App() {
     setActiveOrderId(newOrder.id);
     setCartItems([]);
     setActiveView('tracker');
-    showToast(`Order #${orderNumber} fired to live hearth!`);
+    showToast(`Order #${orderNumber} fired to live hearth`);
   };
 
   // Advance Order Stage manually
@@ -347,89 +355,104 @@ export default function App() {
   }, [simSpeed]);
 
   const activeOrdersCount = orders.filter((o) => o.stage !== 'completed').length;
+  const signatureDish = MENU_ITEMS[0]; // Miyazaki Wagyu Ribeye
 
   return (
-    <div className="min-h-screen bg-[#0f0e0d] text-[#e8e4de] flex flex-col font-sans-body selection:bg-[#c28e58]/30 selection:text-white">
+    <div className="min-h-screen bg-[#fbf9f5] text-[#181716] flex flex-col font-sans-body selection:bg-[#9e5a2a]/20 selection:text-[#181716]">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-[#1c1915] border border-[#c28e58] text-[#f3ede4] px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 text-xs animate-fade-in">
-          <Check className="w-4 h-4 text-[#c28e58]" />
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#181716] text-[#fbf9f5] px-4 py-2.5 rounded shadow-lg flex items-center gap-2 text-xs animate-fade-in border border-[#34302c]">
+          <Check className="w-3.5 h-3.5 text-[#e2b07e]" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Fixed Header */}
+      {/* Redesigned Quiet Header */}
       <Header
         activeView={activeView}
         setActiveView={setActiveView}
         cartCount={cartCount}
         cartTotal={cartTotal}
         openCart={() => setIsCartOpen(true)}
-        diningType={diningType}
+        openSearch={() => setIsSearchOpen(true)}
         tableNumber={tableNumber}
         setTableNumber={setTableNumber}
         activeOrderCount={activeOrdersCount}
       />
 
-      {/* Main Content Area (padding-top 80px / 20 for fixed header) */}
-      <main className="flex-1 pt-20 md:pt-20">
+      {/* Main Content Flow */}
+      <main className="flex-1 pt-18">
         {activeView === 'menu' && (
           <div>
-            {/* Sticky Category Bar */}
+            {/* SECTION 1: Editorial Introduction */}
+            <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 sm:pt-14 pb-8 text-center sm:text-left">
+              <div className="max-w-2xl space-y-3">
+                <span className="text-[10px] uppercase tracking-[0.26em] text-[#9e5a2a] font-medium block">
+                  The Hearth Culinary Catalog
+                </span>
+                <h1 className="font-serif-display text-3xl sm:text-4xl lg:text-[44px] font-medium text-[#181716] leading-tight tracking-tight">
+                  A seasonal menu shaped by fire, craft, and the finest ingredients.
+                </h1>
+                <p className="text-xs sm:text-sm text-[#665e54] font-sans-body leading-relaxed pt-1">
+                  12 courses prepared over 850°F white-oak embers and organic harvests from regenerative regional farms.
+                </p>
+              </div>
+            </section>
+
+            {/* SECTION 2: Signature Culinary Spotlight (Food is the hero) */}
+            {selectedCategory === 'all' && !dietaryFilter && (
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                <FeaturedSpotlight
+                  item={signatureDish}
+                  onSelect={(dish) => setSelectedItemForModal(dish)}
+                  onQuickAdd={handleQuickAdd}
+                />
+              </div>
+            )}
+
+            {/* SECTION 3: Content Chapter Index (No bulky control panel) */}
             <CategoryNav
               selectedCategory={selectedCategory}
               onSelectCategory={setSelectedCategory}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
               dietaryFilter={dietaryFilter}
               setDietaryFilter={setDietaryFilter}
             />
 
-            {/* Content Container */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
-              {/* Category Header & Item Count */}
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pb-3 border-b border-[#23201b]">
-                <div>
-                  <span className="text-[11px] uppercase tracking-widest text-[#c28e58] font-medium">
-                    Seasonal Course Selection
-                  </span>
-                  <h1 className="font-serif-display text-2xl sm:text-3xl font-medium text-[#f3ede4]">
-                    {selectedCategory === 'all'
-                      ? 'The Hearth Culinary Catalog'
-                      : selectedCategory
-                          .replace('-', ' ')
-                          .replace(/\b\w/g, (l) => l.toUpperCase())}
-                  </h1>
-                </div>
-
-                <div className="text-xs text-[#7d7568] font-mono tabular-nums">
-                  Showing {filteredMenuItems.length} dishes
-                </div>
+            {/* SECTION 4: Menu Dishes Grid with Generous Whitespace */}
+            <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 space-y-8">
+              {/* Category Chapter Heading & Count */}
+              <div className="flex items-baseline justify-between border-b border-[#e8e3d8] pb-3">
+                <h2 className="font-serif-display text-2xl font-medium text-[#181716]">
+                  {selectedCategory === 'all'
+                    ? 'All Offerings'
+                    : selectedCategory.replace('-', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                </h2>
+                <span className="font-mono text-xs text-[#8a8174] tabular-nums">
+                  {filteredMenuItems.length} {filteredMenuItems.length === 1 ? 'course' : 'courses'}
+                </span>
               </div>
 
-              {/* Menu Grid: 3-column desktop, 2-column tablet, 1-column mobile */}
               {filteredMenuItems.length === 0 ? (
-                <div className="py-20 text-center space-y-3">
-                  <Utensils className="w-10 h-10 text-[#524b3f] mx-auto stroke-1" />
-                  <h3 className="font-serif-display text-lg text-[#c4bcaa]">
-                    No dishes found matching your criteria
+                <div className="py-20 text-center space-y-3 bg-[#ffffff] border border-[#e8e3d8] rounded p-8">
+                  <Utensils className="w-8 h-8 text-[#b8afa3] mx-auto stroke-1" />
+                  <h3 className="font-serif-display text-lg text-[#181716]">
+                    No courses found for this dietary selection
                   </h3>
-                  <p className="text-xs text-[#7d7568]">
-                    Try clearing your search query or adjusting dietary filters.
+                  <p className="text-xs text-[#786f63]">
+                    Clear dietary preferences to view our full seasonal menu.
                   </p>
                   <button
                     onClick={() => {
-                      setSearchQuery('');
                       setDietaryFilter(null);
                       setSelectedCategory('all');
                     }}
-                    className="px-4 py-2 text-xs bg-[#24201a] text-[#c28e58] rounded-lg hover:bg-[#302b23] transition-colors cursor-pointer"
+                    className="px-4 py-2 text-xs bg-[#f4eee6] text-[#9e5a2a] border border-[#ded8cc] rounded hover:bg-[#ede5d8] transition-colors cursor-pointer font-medium"
                   >
-                    Reset all filters
+                    View All Offerings
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-9">
                   {filteredMenuItems.map((item) => (
                     <MenuItemCard
                       key={item.id}
@@ -440,10 +463,11 @@ export default function App() {
                   ))}
                 </div>
               )}
-            </div>
+            </section>
           </div>
         )}
 
+        {/* SECTION 5: Dedicated Order Tracking View */}
         {activeView === 'tracker' && (
           <OrderTracker
             orders={orders}
@@ -457,19 +481,30 @@ export default function App() {
           />
         )}
 
+        {/* SECTION 6: Restaurant Philosophy & Story */}
         {activeView === 'philosophy' && (
           <ChefPhilosophy onExploreMenu={() => setActiveView('menu')} />
         )}
       </main>
 
-      {/* Item Customization Modal */}
+      {/* Progressive Disclosure: Search Modal (Only rendered when activated) */}
+      <SearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        results={searchResults}
+        onSelectDish={(dish) => setSelectedItemForModal(dish)}
+      />
+
+      {/* Dish Customization & Detail Modal */}
       <ItemCustomizerModal
         item={selectedItemForModal}
         onClose={() => setSelectedItemForModal(null)}
         onAddToCart={handleCustomAddToCart}
       />
 
-      {/* Cart Drawer */}
+      {/* Order Ticket Drawer */}
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
@@ -483,53 +518,32 @@ export default function App() {
         onFireOrder={handleFireOrder}
       />
 
-      {/* Fixed Sticky Mobile Bar (Complies with 15% mobile sticky cap rule) */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#13110f]/95 backdrop-blur-md border-t border-[#26221d] px-4 py-2.5 flex items-center justify-between">
-        <button
-          onClick={() => setActiveView('tracker')}
-          className="flex items-center gap-2 text-xs text-[#c4bcaa] cursor-pointer"
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c28e58] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#c28e58]"></span>
-          </span>
-          <span className="font-medium">Track Order</span>
-          <span className="text-[10px] font-mono text-[#c28e58]">({activeOrdersCount})</span>
-        </button>
+      {/* SECTION 6: Floating Dining Ticket Summary (Only visible when items exist) */}
+      <FloatingTicketDock
+        itemCount={cartCount}
+        totalPrice={cartTotal}
+        onOpenTicket={() => setIsCartOpen(true)}
+      />
 
-        <button
-          onClick={() => setIsCartOpen(true)}
-          className="px-4 py-2 bg-[#c28e58] text-[#0f0e0d] font-semibold text-xs rounded-lg flex items-center gap-2 shadow-md cursor-pointer"
-        >
-          <ShoppingBag className="w-3.5 h-3.5" />
-          <span>Cart ({cartCount})</span>
-          {cartTotal > 0 && (
-            <span className="font-mono tabular-nums font-bold">
-              · ${cartTotal.toFixed(2)}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Elegant Quiet Footer */}
-      <footer className="mt-auto border-t border-[#221f1a] bg-[#0c0b0a] py-8 text-xs text-[#70685c]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+      {/* Elegant Quiet Editorial Footer */}
+      <footer className="mt-auto border-t border-[#e8e3d8] bg-[#f4f0e6] py-12 text-xs text-[#7a7267]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
           <div className="space-y-1">
-            <span className="font-serif-display text-sm font-medium text-[#c4bcaa]">
+            <span className="font-serif-display text-base font-medium text-[#181716] block">
               L'Atelier Hearth Restaurant & Bar
             </span>
-            <p className="text-[11px] text-[#5e564a]">
+            <p className="text-[11px] text-[#8a8174]">
               Wood-Fired Gastronomy · Artisanal Cellar · Live Hearth Kitchen
             </p>
           </div>
 
           <div className="flex items-center gap-6 text-[11px]">
-            <span>Hours: 5:00 PM – 11:30 PM Daily</span>
-            <span aria-hidden="true">·</span>
-            <span>Table Hospitality: {tableNumber}</span>
+            <span>Dinner: 5:00 PM – 11:30 PM Daily</span>
+            <span aria-hidden="true" className="text-[#c8c0b2]">·</span>
+            <span>Hospitality: {tableNumber.split(' (')[0]}</span>
           </div>
 
-          <div className="text-[10px] text-[#504a40]">
+          <div className="text-[10px] text-[#948b80]">
             © 2026 L'Atelier Hearth. All culinary rights reserved.
           </div>
         </div>
