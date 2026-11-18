@@ -78,4 +78,7 @@ export interface Order {
   stationTemp: string;
   stationChef: string;
   logs: KitchenLogEvent[];
+  /** Account that fired the ticket (staff view); null for the seeded demo order. */
+  ownerId?: number | null;
+  ownerName?: string | null;
 }

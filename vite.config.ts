@@ -17,6 +17,16 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // /api/* is forwarded to the Django server (./server, started with
+      // `.\db.ps1 django` on port 8001). The /api prefix is stripped, so
+      // fetch('/api/menu') hits Django's GET /menu without any CORS setup.
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:8001',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, ''),
+        },
+      },
     },
   };
 });

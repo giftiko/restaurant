@@ -2,76 +2,166 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { CategoryNav } from './components/CategoryNav';
 import { MenuItemCard } from './components/MenuItemCard';
+import { FeaturedSpotlight } from './components/FeaturedSpotlight';
+import { SearchModal } from './components/SearchModal';
+import { FloatingTicketDock } from './components/FloatingTicketDock';
 import { ItemCustomizerModal } from './components/ItemCustomizerModal';
 import { CartDrawer } from './components/CartDrawer';
 import { OrderTracker } from './components/OrderTracker';
 import { ChefPhilosophy } from './components/ChefPhilosophy';
-import { MENU_ITEMS, INITIAL_ACTIVE_ORDER, HERO_IMAGE } from './data/menuData';
-import { MenuItem, CategoryId, CartItem, CartItemOption, Order, OrderStage, KitchenLogEvent } from './types/menu';
-import { ShoppingBag, Flame, Sparkles, Check, Clock, Utensils } from 'lucide-react';
+import { MENU_ITEMS } from './data/menuData';
+import { fetchMenuItems } from './api/menu';
+import { createOrder, fetchOrders, toOrderItemInputs } from './api/orders';
+import { AuthUser, fetchMe, logout as logoutRequest } from './api/auth';
+import { AuthModal } from './components/AuthModal';
+import { MenuItem, CategoryId, CartItem, CartItemOption, Order } from './types/menu';
+import { Check, Utensils } from 'lucide-react';
 
-const ORDER_STAGES: OrderStage[] = [
-  'received',
-  'mise_en_place',
-  'wood_fired_hearth',
-  'plating_qc',
-  'ready_for_service',
-  'completed',
-];
+const nowLabel = () =>
+  new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-const STAGE_LOGS: Record<OrderStage, { title: string; detail: string; station: string }> = {
-  received: {
-    title: 'Order Ticket Confirmed & Distributed',
-    detail: 'Ticket acknowledged by Kitchen Expo. Station prep commenced.',
-    station: 'Central Pass & Expo',
-  },
-  mise_en_place: {
-    title: 'Mise en Place & Precision Prep',
-    detail: 'Butcher tempering cuts, fresh herbs harvested from culinary garden.',
-    station: 'Cold Larder Station',
-  },
-  wood_fired_hearth: {
-    title: 'Fired over 840°F White Oak Embers',
-    detail: 'Proteins seared over open fire bed; artisanal crusts blistered in wood oven.',
-    station: 'White Oak Hearth Station',
-  },
-  plating_qc: {
-    title: 'Executive Chef Plating Inspection',
-    detail: 'Micro herbs delicately placed, temperature probe verified, finishing jus drizzled.',
-    station: 'Chef Inspection Pass',
-  },
-  ready_for_service: {
-    title: 'Dispatched for Table Service',
-    detail: 'Dedicated table runner carrying dish cloaks to dining room.',
-    station: 'Service Floor Expedition',
-  },
-  completed: {
-    title: 'Order Delivered & Enjoyed',
-    detail: 'Guests served at table. Culinary journey underway.',
-    station: 'Table Hospitality',
-  },
-};
+const makeLogId = () => `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+
+const CART_STORAGE_KEY = 'hearth.cart.v1';
+const GUEST_STORAGE_KEY = 'hearth.guest.v1';
+
+type DiningType = 'Dine-In' | 'Takeaway' | 'Delivery';
+
+interface GuestDetails {
+  guestName: string;
+  tableNumber: string;
+  diningType: DiningType;
+}
+
+function loadCart(): CartItem[] {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadGuest(): Partial<GuestDetails> {
+  try {
+    const raw = localStorage.getItem(GUEST_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 export default function App() {
   const [activeView, setActiveView] = useState<'menu' | 'tracker' | 'philosophy'>('menu');
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [dietaryFilter, setDietaryFilter] = useState<string | null>(null);
 
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [initialGuest] = useState(loadGuest);
+  const [cartItems, setCartItems] = useState<CartItem[]>(loadCart);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedItemForModal, setSelectedItemForModal] = useState<MenuItem | null>(null);
 
-  const [diningType, setDiningType] = useState<'Dine-In' | 'Takeaway' | 'Delivery'>('Dine-In');
-  const [tableNumber, setTableNumber] = useState('Table 08 (Garden Veranda)');
+  const [diningType, setDiningType] = useState<DiningType>(initialGuest.diningType ?? 'Dine-In');
+  const [tableNumber, setTableNumber] = useState(
+    initialGuest.tableNumber ?? 'Table 08 (Garden Veranda)'
+  );
+  const [guestName, setGuestName] = useState(initialGuest.guestName ?? '');
 
-  const [orders, setOrders] = useState<Order[]>([INITIAL_ACTIVE_ORDER]);
-  const [activeOrderId, setActiveOrderId] = useState<string>(INITIAL_ACTIVE_ORDER.id);
-  const [simSpeed, setSimSpeed] = useState<number>(1);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [activeOrderId, setActiveOrderId] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Filtered menu items
-  const filteredMenuItems = MENU_ITEMS.filter((item) => {
+  // Account session (Django username + password, cookie-based).
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+
+  // Live menu: starts on the local seed data, then swaps to the Django/PostgreSQL
+  // menu as soon as GET /menu answers (falls back silently if the server is off).
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
+  const [menuIsLive, setMenuIsLive] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchMenuItems(controller.signal).then(({ items, live }) => {
+      setMenuItems(items);
+      setMenuIsLive(live);
+    });
+    return () => controller.abort();
+  }, []);
+
+  // Who is signed in? Ask the API once on load (cookie session).
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchMe(controller.signal)
+      .then((account) => setUser(account))
+      .catch(() => setUser(null))
+      .finally(() => setAuthReady(true));
+    return () => controller.abort();
+  }, []);
+
+  // Live orders: a guest sees their own history, staff see the whole kitchen.
+  useEffect(() => {
+    if (!user) {
+      setOrders([]);
+      setActiveOrderId('');
+      return;
+    }
+    const controller = new AbortController();
+    fetchOrders(controller.signal)
+      .then((serverOrders) => {
+        setOrders(serverOrders);
+        setActiveOrderId(serverOrders[0]?.id ?? '');
+      })
+      .catch(() => {
+        /* API unreachable - keep whatever local state we have */
+      });
+    return () => controller.abort();
+  }, [user]);
+
+  // Default the guest name to the account username once we know it.
+  useEffect(() => {
+    if (user && !guestName) setGuestName(user.username);
+  }, [user, guestName]);
+
+  // Persist the cart + guest details so a reload keeps them.
+  useEffect(() => {
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems));
+    } catch {
+      /* storage full or disabled */
+    }
+  }, [cartItems]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        GUEST_STORAGE_KEY,
+        JSON.stringify({ guestName, tableNumber, diningType })
+      );
+    } catch {
+      /* storage full or disabled */
+    }
+  }, [guestName, tableNumber, diningType]);
+
+  // Search filtered results for the SearchModal
+  const searchResults = menuItems.filter((item) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      item.name.toLowerCase().includes(q) ||
+      item.description.toLowerCase().includes(q) ||
+      item.pairingRecommendation?.toLowerCase().includes(q)
+    );
+  });
+
+  // Filtered menu items for the main browsing experience
+  const filteredMenuItems = menuItems.filter((item) => {
     if (selectedCategory !== 'all' && item.categoryId !== selectedCategory) {
       return false;
     }
@@ -82,13 +172,6 @@ export default function App() {
       if (dietaryFilter !== 'Chef-Special' && !item.dietary?.includes(dietaryFilter as any)) {
         return false;
       }
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = item.name.toLowerCase().includes(q);
-      const matchDesc = item.description.toLowerCase().includes(q);
-      const matchPairing = item.pairingRecommendation?.toLowerCase().includes(q);
-      if (!matchName && !matchDesc && !matchPairing) return false;
     }
     return true;
   });
@@ -140,7 +223,7 @@ export default function App() {
     };
 
     setCartItems([...cartItems, newCartItem]);
-    showToast(`Added ${quantity}x ${item.name} with customizations`);
+    showToast(`Added ${quantity}x ${item.name} to ticket`);
   };
 
   const handleUpdateQuantity = (cartItemId: string, newQuantity: number) => {
@@ -176,12 +259,13 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 2500);
+    }, 2400);
   };
 
-  // Fire new order
-  const handleFireOrder = ({
-    guestName,
+  // Fire new order. The Django API is the source of truth; if it can't be
+  // reached we build the same ticket locally so the demo still works offline.
+  const handleFireOrder = async ({
+    guestName: chosenGuest,
     diningType: chosenDining,
     tableNumber: chosenTable,
     tip,
@@ -191,19 +275,47 @@ export default function App() {
     tableNumber: string;
     tip: number;
   }) => {
+    if (!user) {
+      setIsAuthOpen(true);
+      showToast('Please sign in to fire your order');
+      return;
+    }
+
+    const goToTracker = (order: Order) => {
+      setOrders((prev) => [order, ...prev]);
+      setActiveOrderId(order.id);
+      setCartItems([]);
+      setActiveView('tracker');
+      showToast(`Order #${order.orderNumber} fired to live hearth`);
+    };
+
+    try {
+      const created = await createOrder({
+        guestName: chosenGuest || user.username,
+        diningType: chosenDining,
+        tableNumber: chosenDining === 'Dine-In' ? chosenTable : '',
+        tip,
+        items: toOrderItemInputs(cartItems),
+      });
+      goToTracker(created);
+      return;
+    } catch {
+      /* fall through to the local ticket below */
+    }
+
     const subtotal = cartTotal;
     const tax = subtotal * 0.08875;
     const serviceFee = 3.50;
     const total = subtotal + tax + serviceFee + tip;
     const orderNumber = `H-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    const newOrder: Order = {
+    const fallbackOrder: Order = {
       id: `ord-${Date.now()}`,
       orderNumber,
       createdAt: 'Just now',
       diningType: chosenDining,
       tableNumber: chosenDining === 'Dine-In' ? chosenTable : undefined,
-      guestName: guestName || 'Gourmet Patron',
+      guestName: chosenGuest || user.username,
       items: [...cartItems],
       subtotal,
       tax,
@@ -211,15 +323,15 @@ export default function App() {
       tip,
       total,
       stage: 'received',
-      estimatedRemainingSeconds: 960, // 16 min
+      estimatedRemainingSeconds: 960,
       totalEstimatedSeconds: 960,
       stationName: 'Central Hearth & Expo',
       stationTemp: '840°F White Oak Fire',
       stationChef: 'Executive Chef Laurent',
       logs: [
         {
-          id: `log-${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          id: makeLogId(),
+          timestamp: nowLabel(),
           stage: 'received',
           title: 'Order Ticket Received & Fired',
           detail: `Ticket #${orderNumber} acknowledged by Expo. Preparing ${cartCount} courses.`,
@@ -228,208 +340,164 @@ export default function App() {
       ],
     };
 
-    setOrders((prev) => [newOrder, ...prev]);
-    setActiveOrderId(newOrder.id);
-    setCartItems([]);
-    setActiveView('tracker');
-    showToast(`Order #${orderNumber} fired to live hearth!`);
+    goToTracker(fallbackOrder);
   };
 
-  // Advance Order Stage manually
-  const handleAdvanceOrderStage = (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((ord) => {
-        if (ord.id !== orderId) return ord;
-        const currentIdx = ORDER_STAGES.indexOf(ord.stage);
-        if (currentIdx >= ORDER_STAGES.length - 1) return ord;
-
-        const nextStage = ORDER_STAGES[currentIdx + 1];
-        const stageInfo = STAGE_LOGS[nextStage];
-        const newLog: KitchenLogEvent = {
-          id: `log-${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          stage: nextStage,
-          title: stageInfo.title,
-          detail: stageInfo.detail,
-          station: stageInfo.station,
-        };
-
-        const newRemaining = Math.max(
-          0,
-          Math.round(ord.totalEstimatedSeconds * (1 - (currentIdx + 1) / (ORDER_STAGES.length - 1)))
-        );
-
-        return {
-          ...ord,
-          stage: nextStage,
-          estimatedRemainingSeconds: nextStage === 'completed' ? 0 : newRemaining,
-          stationName: stageInfo.station,
-          logs: [newLog, ...ord.logs],
-        };
-      })
-    );
+  const handleAuthenticated = (account: AuthUser) => {
+    setUser(account);
+    showToast(`Signed in as ${account.username}`);
   };
 
-  // Reset Order status for testing
-  const handleResetOrder = (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((ord) => {
-        if (ord.id !== orderId) return ord;
-        return {
-          ...ord,
-          stage: 'received',
-          estimatedRemainingSeconds: ord.totalEstimatedSeconds,
-          logs: [
-            {
-              id: `log-${Date.now()}`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              stage: 'received',
-              title: 'Simulation Reset - Ticket Queued',
-              detail: 'Kitchen reset order cycle for live demonstration.',
-              station: 'Central Expo',
-            },
-          ],
-        };
-      })
-    );
+  const handleLogout = async () => {
+    try {
+      await logoutRequest();
+    } catch {
+      /* even if the server is unreachable, drop the local session view */
+    }
+    setUser(null);
+    setOrders([]);
+    setActiveOrderId('');
+    showToast('Signed out');
   };
 
-  // Live timer tick for real-time tracking
+  // Guest-side countdown: purely cosmetic. The kitchen (admin board) is the only
+  // thing that actually advances a ticket, so this just ticks the ETA down.
   useEffect(() => {
     const timer = setInterval(() => {
-      setOrders((prevOrders) =>
-        prevOrders.map((ord) => {
-          if (ord.stage === 'completed' || ord.estimatedRemainingSeconds <= 0) {
-            return ord;
-          }
-
-          const decrement = 1 * simSpeed;
-          const nextRemaining = Math.max(0, ord.estimatedRemainingSeconds - decrement);
-
-          // Check if we should automatically progress to next stage
-          const currentStageIndex = ORDER_STAGES.indexOf(ord.stage);
-          const stageDuration = ord.totalEstimatedSeconds / (ORDER_STAGES.length - 1);
-          const targetStageIndex = Math.min(
-            ORDER_STAGES.length - 1,
-            Math.floor((ord.totalEstimatedSeconds - nextRemaining) / stageDuration)
-          );
-
-          if (targetStageIndex > currentStageIndex) {
-            const nextStage = ORDER_STAGES[targetStageIndex];
-            const stageInfo = STAGE_LOGS[nextStage];
-            const newLog: KitchenLogEvent = {
-              id: `log-${Date.now()}`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              stage: nextStage,
-              title: stageInfo.title,
-              detail: stageInfo.detail,
-              station: stageInfo.station,
-            };
-
-            return {
-              ...ord,
-              stage: nextStage,
-              estimatedRemainingSeconds: nextRemaining,
-              stationName: stageInfo.station,
-              logs: [newLog, ...ord.logs],
-            };
-          }
-
-          return {
-            ...ord,
-            estimatedRemainingSeconds: nextRemaining,
-          };
-        })
-      );
+      setOrders((prevOrders) => {
+        let changed = false;
+        const next = prevOrders.map((ord) => {
+          if (ord.stage === 'completed' || ord.estimatedRemainingSeconds <= 0) return ord;
+          changed = true;
+          return { ...ord, estimatedRemainingSeconds: ord.estimatedRemainingSeconds - 1 };
+        });
+        return changed ? next : prevOrders;
+      });
     }, 1000);
-
     return () => clearInterval(timer);
-  }, [simSpeed]);
+  }, []);
+
+  // Poll so a guest picks up stage/ETA changes staff make on the admin board.
+  useEffect(() => {
+    if (!user) return;
+    const poll = setInterval(() => {
+      fetchOrders()
+        .then((serverOrders) => {
+          setOrders(serverOrders);
+          setActiveOrderId((current) =>
+            serverOrders.some((o) => o.id === current) ? current : serverOrders[0]?.id ?? ''
+          );
+        })
+        .catch(() => {
+          /* API blip - keep the last known state */
+        });
+    }, 15000);
+    return () => clearInterval(poll);
+  }, [user]);
 
   const activeOrdersCount = orders.filter((o) => o.stage !== 'completed').length;
+  const signatureDish = menuItems[0]; // Miyazaki Wagyu Ribeye (sort_order 0)
 
   return (
-    <div className="min-h-screen bg-[#0f0e0d] text-[#e8e4de] flex flex-col font-sans-body selection:bg-[#c28e58]/30 selection:text-white">
+    <div className="min-h-screen bg-[#fbf9f5] text-[#181716] flex flex-col font-sans-body selection:bg-[#9e5a2a]/20 selection:text-[#181716]">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-[#1c1915] border border-[#c28e58] text-[#f3ede4] px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 text-xs animate-fade-in">
-          <Check className="w-4 h-4 text-[#c28e58]" />
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#181716] text-[#fbf9f5] px-4 py-2.5 rounded shadow-lg flex items-center gap-2 text-xs animate-fade-in border border-[#34302c]">
+          <Check className="w-3.5 h-3.5 text-[#e2b07e]" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Fixed Header */}
+      {/* Redesigned Quiet Header */}
       <Header
         activeView={activeView}
         setActiveView={setActiveView}
         cartCount={cartCount}
         cartTotal={cartTotal}
         openCart={() => setIsCartOpen(true)}
-        diningType={diningType}
+        openSearch={() => setIsSearchOpen(true)}
         tableNumber={tableNumber}
         setTableNumber={setTableNumber}
         activeOrderCount={activeOrdersCount}
+        user={user}
+        authReady={authReady}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onLogout={handleLogout}
       />
 
-      {/* Main Content Area (padding-top 80px / 20 for fixed header) */}
-      <main className="flex-1 pt-20 md:pt-20">
+      {/* Main Content Flow */}
+      <main className="flex-1 pt-18">
         {activeView === 'menu' && (
           <div>
-            {/* Sticky Category Bar */}
+            {/* SECTION 1: Editorial Introduction */}
+            <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 sm:pt-14 pb-8 text-center sm:text-left">
+              <div className="max-w-2xl space-y-3">
+                <span className="text-[10px] uppercase tracking-[0.26em] text-[#9e5a2a] font-medium block">
+                  The Hearth Culinary Catalog
+                </span>
+                <h1 className="font-serif-display text-3xl sm:text-4xl lg:text-[44px] font-medium text-[#181716] leading-tight tracking-tight">
+                  A seasonal menu shaped by fire, craft, and the finest ingredients.
+                </h1>
+                <p className="text-xs sm:text-sm text-[#665e54] font-sans-body leading-relaxed pt-1">
+                  12 courses prepared over 850°F white-oak embers and organic harvests from regenerative regional farms.
+                </p>
+              </div>
+            </section>
+
+            {/* SECTION 2: Signature Culinary Spotlight (Food is the hero) */}
+            {selectedCategory === 'all' && !dietaryFilter && signatureDish && (
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                <FeaturedSpotlight
+                  item={signatureDish}
+                  onSelect={(dish) => setSelectedItemForModal(dish)}
+                  onQuickAdd={handleQuickAdd}
+                />
+              </div>
+            )}
+
+            {/* SECTION 3: Content Chapter Index (No bulky control panel) */}
             <CategoryNav
               selectedCategory={selectedCategory}
               onSelectCategory={setSelectedCategory}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
               dietaryFilter={dietaryFilter}
               setDietaryFilter={setDietaryFilter}
             />
 
-            {/* Content Container */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
-              {/* Category Header & Item Count */}
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pb-3 border-b border-[#23201b]">
-                <div>
-                  <span className="text-[11px] uppercase tracking-widest text-[#c28e58] font-medium">
-                    Seasonal Course Selection
-                  </span>
-                  <h1 className="font-serif-display text-2xl sm:text-3xl font-medium text-[#f3ede4]">
-                    {selectedCategory === 'all'
-                      ? 'The Hearth Culinary Catalog'
-                      : selectedCategory
-                          .replace('-', ' ')
-                          .replace(/\b\w/g, (l) => l.toUpperCase())}
-                  </h1>
-                </div>
-
-                <div className="text-xs text-[#7d7568] font-mono tabular-nums">
-                  Showing {filteredMenuItems.length} dishes
-                </div>
+            {/* SECTION 4: Menu Dishes Grid with Generous Whitespace */}
+            <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 space-y-8">
+              {/* Category Chapter Heading & Count */}
+              <div className="flex items-baseline justify-between border-b border-[#e8e3d8] pb-3">
+                <h2 className="font-serif-display text-2xl font-medium text-[#181716]">
+                  {selectedCategory === 'all'
+                    ? 'All Offerings'
+                    : selectedCategory.replace('-', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                </h2>
+                <span className="font-mono text-xs text-[#8a8174] tabular-nums">
+                  {filteredMenuItems.length} {filteredMenuItems.length === 1 ? 'course' : 'courses'}
+                </span>
               </div>
 
-              {/* Menu Grid: 3-column desktop, 2-column tablet, 1-column mobile */}
               {filteredMenuItems.length === 0 ? (
-                <div className="py-20 text-center space-y-3">
-                  <Utensils className="w-10 h-10 text-[#524b3f] mx-auto stroke-1" />
-                  <h3 className="font-serif-display text-lg text-[#c4bcaa]">
-                    No dishes found matching your criteria
+                <div className="py-20 text-center space-y-3 bg-[#ffffff] border border-[#e8e3d8] rounded p-8">
+                  <Utensils className="w-8 h-8 text-[#b8afa3] mx-auto stroke-1" />
+                  <h3 className="font-serif-display text-lg text-[#181716]">
+                    No courses found for this dietary selection
                   </h3>
-                  <p className="text-xs text-[#7d7568]">
-                    Try clearing your search query or adjusting dietary filters.
+                  <p className="text-xs text-[#786f63]">
+                    Clear dietary preferences to view our full seasonal menu.
                   </p>
                   <button
                     onClick={() => {
-                      setSearchQuery('');
                       setDietaryFilter(null);
                       setSelectedCategory('all');
                     }}
-                    className="px-4 py-2 text-xs bg-[#24201a] text-[#c28e58] rounded-lg hover:bg-[#302b23] transition-colors cursor-pointer"
+                    className="px-4 py-2 text-xs bg-[#f4eee6] text-[#9e5a2a] border border-[#ded8cc] rounded hover:bg-[#ede5d8] transition-colors cursor-pointer font-medium"
                   >
-                    Reset all filters
+                    View All Offerings
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-9">
                   {filteredMenuItems.map((item) => (
                     <MenuItemCard
                       key={item.id}
@@ -440,36 +508,53 @@ export default function App() {
                   ))}
                 </div>
               )}
-            </div>
+            </section>
           </div>
         )}
 
+        {/* SECTION 5: Dedicated Order Tracking View */}
         {activeView === 'tracker' && (
           <OrderTracker
             orders={orders}
             activeOrderId={activeOrderId}
             setActiveOrderId={setActiveOrderId}
-            onAdvanceOrderStage={handleAdvanceOrderStage}
-            onResetOrder={handleResetOrder}
             onReturnToMenu={() => setActiveView('menu')}
-            simSpeed={simSpeed}
-            setSimSpeed={setSimSpeed}
+            isAuthenticated={!!user}
+            onOpenAuth={() => setIsAuthOpen(true)}
           />
         )}
 
+        {/* SECTION 6: Restaurant Philosophy & Story */}
         {activeView === 'philosophy' && (
           <ChefPhilosophy onExploreMenu={() => setActiveView('menu')} />
         )}
       </main>
 
-      {/* Item Customization Modal */}
+      {/* Progressive Disclosure: Search Modal (Only rendered when activated) */}
+      <SearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        results={searchResults}
+        onSelectDish={(dish) => setSelectedItemForModal(dish)}
+      />
+
+      {/* Sign in / create account */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthenticated={handleAuthenticated}
+      />
+
+      {/* Dish Customization & Detail Modal */}
       <ItemCustomizerModal
         item={selectedItemForModal}
         onClose={() => setSelectedItemForModal(null)}
         onAddToCart={handleCustomAddToCart}
       />
 
-      {/* Cart Drawer */}
+      {/* Order Ticket Drawer */}
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
@@ -480,56 +565,54 @@ export default function App() {
         diningType={diningType}
         setDiningType={setDiningType}
         tableNumber={tableNumber}
+        guestName={guestName}
+        setGuestName={setGuestName}
+        isAuthenticated={!!user}
         onFireOrder={handleFireOrder}
       />
 
-      {/* Fixed Sticky Mobile Bar (Complies with 15% mobile sticky cap rule) */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#13110f]/95 backdrop-blur-md border-t border-[#26221d] px-4 py-2.5 flex items-center justify-between">
-        <button
-          onClick={() => setActiveView('tracker')}
-          className="flex items-center gap-2 text-xs text-[#c4bcaa] cursor-pointer"
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c28e58] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#c28e58]"></span>
-          </span>
-          <span className="font-medium">Track Order</span>
-          <span className="text-[10px] font-mono text-[#c28e58]">({activeOrdersCount})</span>
-        </button>
+      {/* SECTION 6: Floating Dining Ticket Summary (Only visible when items exist) */}
+      <FloatingTicketDock
+        itemCount={cartCount}
+        totalPrice={cartTotal}
+        onOpenTicket={() => setIsCartOpen(true)}
+      />
 
-        <button
-          onClick={() => setIsCartOpen(true)}
-          className="px-4 py-2 bg-[#c28e58] text-[#0f0e0d] font-semibold text-xs rounded-lg flex items-center gap-2 shadow-md cursor-pointer"
-        >
-          <ShoppingBag className="w-3.5 h-3.5" />
-          <span>Cart ({cartCount})</span>
-          {cartTotal > 0 && (
-            <span className="font-mono tabular-nums font-bold">
-              · ${cartTotal.toFixed(2)}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Elegant Quiet Footer */}
-      <footer className="mt-auto border-t border-[#221f1a] bg-[#0c0b0a] py-8 text-xs text-[#70685c]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+      {/* Elegant Quiet Editorial Footer */}
+      <footer className="mt-auto border-t border-[#e8e3d8] bg-[#f4f0e6] py-12 text-xs text-[#7a7267]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
           <div className="space-y-1">
-            <span className="font-serif-display text-sm font-medium text-[#c4bcaa]">
+            <span className="font-serif-display text-base font-medium text-[#181716] block">
               L'Atelier Hearth Restaurant & Bar
             </span>
-            <p className="text-[11px] text-[#5e564a]">
+            <p className="text-[11px] text-[#8a8174]">
               Wood-Fired Gastronomy · Artisanal Cellar · Live Hearth Kitchen
             </p>
           </div>
 
           <div className="flex items-center gap-6 text-[11px]">
-            <span>Hours: 5:00 PM – 11:30 PM Daily</span>
-            <span aria-hidden="true">·</span>
-            <span>Table Hospitality: {tableNumber}</span>
+            <span>Dinner: 5:00 PM – 11:30 PM Daily</span>
+            <span aria-hidden="true" className="text-[#c8c0b2]">·</span>
+            <span>Hospitality: {tableNumber.split(' (')[0]}</span>
+            <span
+              className="flex items-center gap-1.5"
+              title={
+                menuIsLive
+                  ? 'Menu served by Django from PostgreSQL'
+                  : 'Django server not reachable - showing bundled menu data'
+              }
+            >
+              <span
+                aria-hidden="true"
+                className={`w-1.5 h-1.5 rounded-full ${
+                  menuIsLive ? 'bg-[#4a7c59] animate-pulse' : 'bg-[#c8c0b2]'
+                }`}
+              />
+              {menuIsLive ? 'Live menu' : 'Offline menu'}
+            </span>
           </div>
 
-          <div className="text-[10px] text-[#504a40]">
+          <div className="text-[10px] text-[#948b80]">
             © 2026 L'Atelier Hearth. All culinary rights reserved.
           </div>
         </div>
