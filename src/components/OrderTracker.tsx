@@ -8,7 +8,13 @@ import {
   UtensilsCrossed, 
   Bell, 
   Wine, 
+<<<<<<< HEAD
   Printer
+=======
+  Printer, 
+  FastForward, 
+  RotateCcw
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
 } from 'lucide-react';
 import { Order, OrderStage } from '../types/menu';
 
@@ -83,6 +89,7 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
         <Flame className="w-10 h-10 text-[#9e5a2a] mx-auto stroke-1" />
+<<<<<<< HEAD
         <h2 className="font-serif-display text-2xl text-[#181716]">
           {isAuthenticated ? 'No Active Kitchen Orders' : 'Sign in to track your orders'}
         </h2>
@@ -107,6 +114,16 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
             Explore Seasonal Menu
           </button>
         </div>
+=======
+        <h2 className="font-serif-display text-2xl text-[#181716]">No Active Kitchen Orders</h2>
+        <p className="text-xs text-[#7a7267]">Select courses from our menu to initiate a live hearth ticket.</p>
+        <button
+          onClick={onReturnToMenu}
+          className="px-5 py-2.5 bg-[#181716] text-[#ffffff] font-medium text-xs rounded cursor-pointer"
+        >
+          Explore Seasonal Menu
+        </button>
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
       </div>
     );
   }
@@ -162,6 +179,28 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
             Live Kitchen Order Status
           </h1>
         </div>
+<<<<<<< HEAD
+=======
+
+        {/* Order Selector pills if multiple orders */}
+        {orders.length > 1 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto p-1 bg-[#ffffff] border border-[#ded8cc] rounded shadow-2xs">
+            {orders.map((ord) => (
+              <button
+                key={ord.id}
+                onClick={() => setActiveOrderId(ord.id)}
+                className={`px-3 py-1.5 text-xs font-mono rounded transition-colors cursor-pointer ${
+                  ord.id === activeOrderId
+                    ? 'bg-[#181716] text-[#ffffff]'
+                    : 'text-[#665e54] hover:text-[#181716]'
+                }`}
+              >
+                #{ord.orderNumber} ({ord.diningType})
+              </button>
+            ))}
+          </div>
+        )}
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
       </div>
 
       {/* Main Order Status Showcase Grid */}
@@ -261,6 +300,66 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
                 );
               })}
             </div>
+<<<<<<< HEAD
+=======
+
+            {/* Live Kitchen Telemetry Bar */}
+            <div className="p-4 bg-[#fbf9f6] border border-[#ded8cc] rounded grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div className="space-y-0.5">
+                <span className="text-[10px] uppercase tracking-[0.16em] text-[#7a7267] font-medium">Kitchen Station</span>
+                <p className="font-medium text-[#181716]">{activeOrder.stationName}</p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[10px] uppercase tracking-[0.16em] text-[#7a7267] font-medium">Hearth Heat / Temp</span>
+                <p className="font-mono text-[#9e5a2a] font-medium">{activeOrder.stationTemp}</p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[10px] uppercase tracking-[0.16em] text-[#7a7267] font-medium">Station Lead</span>
+                <p className="font-medium text-[#181716]">{activeOrder.stationChef}</p>
+              </div>
+            </div>
+
+            {/* Simulation Testing Control Ribbon */}
+            <div className="pt-3 border-t border-[#f0ebe2] flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-[#7a7267]">
+                <span className="text-[11px] uppercase tracking-[0.16em] font-medium">Simulator Speed:</span>
+                {[
+                  { speed: 1, label: '1x' },
+                  { speed: 5, label: '5x' },
+                  { speed: 10, label: '10x' },
+                ].map((s) => (
+                  <button
+                    key={s.label}
+                    onClick={() => setSimSpeed(s.speed)}
+                    className={`px-2.5 py-1 font-mono text-[11px] rounded transition-colors cursor-pointer border ${
+                      simSpeed === s.speed
+                        ? 'bg-[#181716] text-[#ffffff] font-bold border-[#181716]'
+                        : 'bg-[#faf8f5] text-[#665e54] border-[#ded8cc] hover:bg-[#ede7dc]'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onAdvanceOrderStage(activeOrder.id)}
+                  className="px-3 py-1.5 bg-[#ede5d8] hover:bg-[#e4dcce] border border-[#ded8cc] text-[#181716] rounded transition-colors flex items-center gap-1.5 cursor-pointer text-xs font-medium"
+                >
+                  <FastForward className="w-3.5 h-3.5 text-[#9e5a2a]" />
+                  <span>Next Stage</span>
+                </button>
+                <button
+                  onClick={() => onResetOrder(activeOrder.id)}
+                  className="px-2.5 py-1.5 bg-[#faf8f5] hover:bg-[#ede7dc] border border-[#ded8cc] text-[#665e54] hover:text-[#181716] rounded transition-colors cursor-pointer text-xs"
+                  title="Reset status simulation"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
           </div>
 
           {/* Kitchen Event Feed / Activity Log */}

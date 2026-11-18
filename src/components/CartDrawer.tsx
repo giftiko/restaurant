@@ -37,6 +37,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   isAuthenticated,
   onFireOrder,
 }) => {
+<<<<<<< HEAD
+=======
+  const [guestName] = useState('Guest Patron');
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
   const [tipRate, setTipRate] = useState<number>(0.18);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -274,7 +278,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 ) : (
                   <>
                     <Flame className="w-4 h-4 fill-current text-[#e2b07e]" />
+<<<<<<< HEAD
                     <span>{isAuthenticated ? 'Fire Order to Kitchen' : 'Sign in to Fire Order'}</span>
+=======
+                    <span>Fire Order to Kitchen</span>
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
                     <ArrowRight className="w-4 h-4 ml-1" />
                   </>
                 )}

@@ -9,12 +9,17 @@ import { ItemCustomizerModal } from './components/ItemCustomizerModal';
 import { CartDrawer } from './components/CartDrawer';
 import { OrderTracker } from './components/OrderTracker';
 import { ChefPhilosophy } from './components/ChefPhilosophy';
+<<<<<<< HEAD
 import { MENU_ITEMS } from './data/menuData';
 import { fetchMenuItems } from './api/menu';
 import { createOrder, fetchOrders, toOrderItemInputs } from './api/orders';
 import { AuthUser, fetchMe, logout as logoutRequest } from './api/auth';
 import { AuthModal } from './components/AuthModal';
 import { MenuItem, CategoryId, CartItem, CartItemOption, Order } from './types/menu';
+=======
+import { MENU_ITEMS, INITIAL_ACTIVE_ORDER } from './data/menuData';
+import { MenuItem, CategoryId, CartItem, CartItemOption, Order, OrderStage, KitchenLogEvent } from './types/menu';
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
 import { Check, Utensils } from 'lucide-react';
 
 const nowLabel = () =>
@@ -76,6 +81,7 @@ export default function App() {
   const [activeOrderId, setActiveOrderId] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+<<<<<<< HEAD
   // Account session (Django username + password, cookie-based).
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -151,6 +157,10 @@ export default function App() {
 
   // Search filtered results for the SearchModal
   const searchResults = menuItems.filter((item) => {
+=======
+  // Search filtered results for the SearchModal
+  const searchResults = MENU_ITEMS.filter((item) => {
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -161,7 +171,11 @@ export default function App() {
   });
 
   // Filtered menu items for the main browsing experience
+<<<<<<< HEAD
   const filteredMenuItems = menuItems.filter((item) => {
+=======
+  const filteredMenuItems = MENU_ITEMS.filter((item) => {
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
     if (selectedCategory !== 'all' && item.categoryId !== selectedCategory) {
       return false;
     }
@@ -340,7 +354,15 @@ export default function App() {
       ],
     };
 
+<<<<<<< HEAD
     goToTracker(fallbackOrder);
+=======
+    setOrders((prev) => [newOrder, ...prev]);
+    setActiveOrderId(newOrder.id);
+    setCartItems([]);
+    setActiveView('tracker');
+    showToast(`Order #${orderNumber} fired to live hearth`);
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
   };
 
   const handleAuthenticated = (account: AuthUser) => {
@@ -396,7 +418,11 @@ export default function App() {
   }, [user]);
 
   const activeOrdersCount = orders.filter((o) => o.stage !== 'completed').length;
+<<<<<<< HEAD
   const signatureDish = menuItems[0]; // Miyazaki Wagyu Ribeye (sort_order 0)
+=======
+  const signatureDish = MENU_ITEMS[0]; // Miyazaki Wagyu Ribeye
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
 
   return (
     <div className="min-h-screen bg-[#fbf9f5] text-[#181716] flex flex-col font-sans-body selection:bg-[#9e5a2a]/20 selection:text-[#181716]">
@@ -445,7 +471,11 @@ export default function App() {
             </section>
 
             {/* SECTION 2: Signature Culinary Spotlight (Food is the hero) */}
+<<<<<<< HEAD
             {selectedCategory === 'all' && !dietaryFilter && signatureDish && (
+=======
+            {selectedCategory === 'all' && !dietaryFilter && (
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
               <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                 <FeaturedSpotlight
                   item={signatureDish}
@@ -540,6 +570,7 @@ export default function App() {
         onSelectDish={(dish) => setSelectedItemForModal(dish)}
       />
 
+<<<<<<< HEAD
       {/* Sign in / create account */}
       <AuthModal
         isOpen={isAuthOpen}
@@ -547,6 +578,8 @@ export default function App() {
         onAuthenticated={handleAuthenticated}
       />
 
+=======
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
       {/* Dish Customization & Detail Modal */}
       <ItemCustomizerModal
         item={selectedItemForModal}
@@ -594,6 +627,7 @@ export default function App() {
             <span>Dinner: 5:00 PM – 11:30 PM Daily</span>
             <span aria-hidden="true" className="text-[#c8c0b2]">·</span>
             <span>Hospitality: {tableNumber.split(' (')[0]}</span>
+<<<<<<< HEAD
             <span
               className="flex items-center gap-1.5"
               title={
@@ -610,6 +644,8 @@ export default function App() {
               />
               {menuIsLive ? 'Live menu' : 'Offline menu'}
             </span>
+=======
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
           </div>
 
           <div className="text-[10px] text-[#948b80]">

@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
+<<<<<<< HEAD
 import { ShoppingBag, Search, MapPin, ChevronDown, User, LogOut } from 'lucide-react';
 import { AuthUser } from '../api/auth';
+=======
+import { ShoppingBag, Search, MapPin, ChevronDown } from 'lucide-react';
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
 
 interface HeaderProps {
   activeView: 'menu' | 'tracker' | 'philosophy';
@@ -95,6 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Utility Controls & Cart Trigger */}
         <div className="flex items-center gap-3 sm:gap-4 text-xs">
+<<<<<<< HEAD
           {/* Account: sign in, or the signed-in user with a staff badge */}
           {!authReady ? (
             <span
@@ -132,6 +137,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
+=======
+>>>>>>> 11923a69831f2207a098e08b10313563f4731f3d
           {/* Progressive Disclosure Search Trigger */}
           <button
             onClick={openSearch}
